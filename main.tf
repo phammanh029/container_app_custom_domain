@@ -122,6 +122,21 @@ BASH
   }
 }
 
+# Bind custom domain using Azure-managed cert:
+# Omit container_app_environment_certificate_id for managed cert 
+resource "azurerm_container_app_custom_domain" "domain" {
+  name             = var.hostname
+  container_app_id = azurerm_container_app.app.id
+
+  certificate_binding_type = "SniEnabled"
+
+  depends_on = [null_resource.wait_for_dns]
+  lifecycle {
+    // When using an Azure created Managed Certificate these values must be added to ignore_changes to prevent resource recreation.
+    ignore_changes = [certificate_binding_type, container_app_environment_certificate_id]
+  }
+}
+
 resource "azapi_resource" "managed_cert" {
   type      = "Microsoft.App/managedEnvironments/managedCertificates@2025-07-01"
   name      = var.hostname
@@ -138,24 +153,8 @@ resource "azapi_resource" "managed_cert" {
   # Ensure hostname + DNS exist first
   depends_on = [
     azurerm_dns_cname_record.cname,
-    azurerm_dns_txt_record.asuid
+    azurerm_dns_txt_record.asuid,
+    azurerm_container_app_custom_domain.domain
   ]
 }
-
-# Bind custom domain using Azure-managed cert:
-# Omit container_app_environment_certificate_id for managed cert 
-resource "azurerm_container_app_custom_domain" "domain" {
-  name             = var.hostname
-  container_app_id = azurerm_container_app.app.id
-
-  certificate_binding_type = "SniEnabled"
-
-  depends_on = [null_resource.wait_for_dns, azapi_resource.managed_cert]
-  lifecycle {
-    // When using an Azure created Managed Certificate these values must be added to ignore_changes to prevent resource recreation.
-    ignore_changes = [certificate_binding_type, container_app_environment_certificate_id]
-  }
-}
-
-
 
