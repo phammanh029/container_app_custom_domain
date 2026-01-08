@@ -128,7 +128,7 @@ resource "azurerm_container_app_custom_domain" "domain" {
   name             = var.hostname
   container_app_id = azurerm_container_app.app.id
 
-  certificate_binding_type = "SniEnabled"
+  certificate_binding_type = "Disabled"
 
   depends_on = [null_resource.wait_for_dns]
   lifecycle {
@@ -158,3 +158,48 @@ resource "azapi_resource" "managed_cert" {
   ]
 }
 
+resource "azapi_update_resource" "bind_domain" {
+  type        = "Microsoft.App/containerApps@2025-07-01"
+  resource_id = azurerm_container_app.app.id
+
+  body = {
+    properties = {
+      configuration = {
+        ingress = {
+          customDomains = [
+            {
+              name          = var.hostname
+              bindingType   = "SniEnabled"
+              certificateId = azapi_resource.managed_cert.id
+            }
+          ]
+        }
+      }
+    }
+  }
+
+  depends_on = [azapi_resource.managed_cert]
+}
+
+# We need this resource to unbind the custom domain on destroy,
+resource "azapi_resource_action" "unbind_domain_on_destroy" {
+  type        = "Microsoft.App/containerApps@2025-07-01"
+  resource_id = azurerm_container_app.app.id
+  method      = "PATCH"
+  when        = "destroy"
+
+  body = {
+    properties = {
+      configuration = {
+        ingress = {
+          customDomains = [
+            {
+              name        = var.hostname
+              bindingType = "Disabled"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
